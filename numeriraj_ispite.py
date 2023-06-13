@@ -163,9 +163,9 @@ def main():
                 if num == 0:
                     continue
                 num += ADD_EXTRA_COPIES
-                
+
                 dots = Dots(num)
-                
+
                 DIGITS = len(str(num))
                 for i in range(1, num+1):
                     STR = f'{dvorana} {i:0{DIGITS}}/{num}'
