@@ -14,13 +14,14 @@ from tkinter import messagebox
 import traceback
 from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen.canvas import Canvas
-from reportlab.lib.pagesizes import A4
 import os
 from io import BytesIO
+from copy import copy
 
-a4_width, a4_height = A4
-POS_X = a4_width-15
-POS_Y = 15  # a4_height-20
+ADD_EXTRA_COPIES = 3
+POS_X_SHIFT = -15
+POS_Y_SHIFT = 15
+ALIGN = 'RIGHT'
 
 DEFAULT_TEXT = 'Ovdje zalijepi tablicu iz "Postavke provjere" (kartica "Studenata u dvorani") s FERweba!\n\
 \n\
@@ -43,7 +44,6 @@ A-309 	20 	20\n\
 A-310 	20 	20\n\
 A-311 	16 	16\n\
 Neraspoređen 	- 	0'
-ADD_EXTRA_COPIES = 3
 
 
 class Dots:
@@ -62,7 +62,7 @@ def main():
         # You have to use the tkinterDnD.Tk object for super easy initialization,
         # and to be able to use the main window as a dnd widget
         root = tkinterDnD.Tk()
-        root.geometry('800x800+100+100')
+        root.geometry('800x800+200+100')
         root.title("Numeriranje ispita")
 
         stringvar1 = tk.StringVar()
@@ -143,6 +143,9 @@ def main():
 
             OUTPUT_FILE = os.path.join(
                 os.path.dirname(INPUT_FILE), 'print.pdf')
+            if os.path.exists(OUTPUT_FILE):
+                messagebox.showinfo(
+                    "Upozorenje!", f"Datoteka <<{OUTPUT_FILE}>> već postoji i bit će prebrisana.")
 
             TABLE = entry1.get('1.0', tk.END)
             list_TABLE, info = parse(TABLE)
@@ -158,7 +161,13 @@ def main():
             ###############
             # Kreiraj Pdf #
             ###############
+
+            PAGE_WIDTH = existing_pdf.pages[0].mediabox.width
+            PAGE_HEIGHT = existing_pdf.pages[0].mediabox.height
+            POS_X = POS_X_SHIFT % PAGE_WIDTH
+            POS_Y = POS_Y_SHIFT % PAGE_HEIGHT
             output = PdfWriter()
+
             for dvorana, num in list_TABLE:
                 if num == 0:
                     continue
@@ -172,14 +181,20 @@ def main():
                     stringvar2.set(f'Obrađujem {STR} {dots}')
                     root.update_idletasks()
                     packet = BytesIO()
-                    canvas = Canvas(packet)
-                    canvas.drawRightString(POS_X, POS_Y, STR)
+                    canvas = Canvas(packet, pagesize=(PAGE_WIDTH, PAGE_HEIGHT))
+
+                    if ALIGN == 'RIGHT':
+                        canvas.drawRightString(POS_X, POS_Y, STR)
+                    else:
+                        canvas.drawLeftString(POS_X, POS_Y, STR)
+
                     canvas.save()
                     packet.seek(0)
-                    new_page = PdfReader(packet).pages[0]
 
-                    new_page.merge_page(existing_pdf.pages[0])
+                    new_page = copy(existing_pdf.pages[0])
+                    new_page.merge_page(PdfReader(packet).pages[0])
                     output.add_page(new_page)
+
                     for i in range(NUM_PAGES-1):
                         output.add_page(existing_pdf.pages[i+1])
             with open(OUTPUT_FILE, 'wb') as f:
