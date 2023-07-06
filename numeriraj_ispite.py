@@ -141,8 +141,7 @@ def main():
                                     f"<<{INPUT_FILE}>> nije valjana pdf datoteka.")
                 return
 
-            OUTPUT_FILE = os.path.join(
-                os.path.dirname(INPUT_FILE), 'print.pdf')
+            OUTPUT_FILE = os.path.splitext(INPUT_FILE)[0]+'_print.pdf'
             if os.path.exists(OUTPUT_FILE):
                 messagebox.showinfo(
                     "Upozorenje!", f"Datoteka <<{OUTPUT_FILE}>> već postoji i bit će prebrisana.")
