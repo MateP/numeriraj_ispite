@@ -10,13 +10,13 @@ Created on Mon Jun 12 13:55:08 2023
 import tkinter as tk
 # from tkinter import ttk
 import tkinterDnD  # Importing the tkinterDnD module
-from tkinter import messagebox
+from tkinter import messagebox, filedialog
 import traceback
 from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen.canvas import Canvas
 import os
 from io import BytesIO
-from copy import copy
+from copy import deepcopy
 
 ADD_EXTRA_COPIES = 3
 POS_X_SHIFT = -15
@@ -65,14 +65,27 @@ def main():
         root.geometry('800x800+200+100')
         root.title("Numeriranje ispita")
 
+        try:
+            try:
+                root.tk.call('tk_getOpenFile', '-foobarbaz')
+            except tk.TclError:
+                pass
+            root.tk.call('set', '::tk::dialog::file::showHiddenVar', '0')
+        except:
+            pass
+
         stringvar1 = tk.StringVar()
-        stringvar1.set('Dovuci pdf datoteku s ispitom ovdje!')
+        stringvar1.set(
+            'Dovuci pdf datoteku s ispitom ovdje ili je odaberi klikom desno!')
         stringvar2 = tk.StringVar()
         stringvar2.set('')
 
         def drop(event):
             # This function is called, when stuff is dropped into a widget
-            stringvar1.set(event.data)
+            if event.data[0] == '{':
+                stringvar1.set(event.data[1:-1])
+            else:
+                stringvar1.set(event.data)
 
         # def drag_command(event):
         #     # This function is called at the start of the drag,
@@ -82,9 +95,16 @@ def main():
 
         # Without DnD hook you need to register the widget for every purpose,
         # and bind it to the function you want to call
-        label_1 = tk.Label(root, height=5,
-                           textvar=stringvar1, relief="solid")
-        label_1.pack(fill="both", padx=10, pady=10)
+
+        if_frame = tk.Frame(root)
+        if_frame.pack()
+
+        options_frame = tk.Frame(root)
+        options_frame.pack()
+
+        label_1 = tk.Label(if_frame, height=5,
+                           textvar=stringvar1, relief="solid", width=60)
+        label_1.pack(side='left', padx=10, pady=10)
 
         label_1.register_drop_target("*")
         label_1.bind("<<Drop>>", drop)
@@ -95,6 +115,44 @@ def main():
         # label_2 = ttk.Label(root, ondrop=drop,
         #                     textvar=stringvar1, padding=50, relief="solid")
         # label_2.pack(fill="both", expand=True, padx=10, pady=10)
+
+        button_IF = tk.Button(if_frame, text='Odaberi datoteku',
+                              command=lambda: stringvar1.set(
+                                  filedialog.askopenfilename(
+                                      title='Učitajte pdf datoteku s ispitom',
+                                      filetypes=[("Pdf file", ".pdf")])))
+        button_IF.pack(side='right')
+
+        label_ADD_EXTRA_COPIES = tk.Label(
+            options_frame, text='Broj dodatnih kopija po dvorani:')
+        label_POS_X_SHIFT = tk.Label(options_frame, text='x-pomak:')
+        label_POS_Y_SHIFT = tk.Label(options_frame, text='y-pomak:')
+        label_ALIGN = tk.Label(
+            options_frame, text='Pozicija (LEFT ili RIGHT):')
+
+        entry_ADD_EXTRA_COPIES = tk.Entry(options_frame)
+        entry_ADD_EXTRA_COPIES.insert(tk.END, ADD_EXTRA_COPIES)
+
+        entry_POS_X_SHIFT = tk.Entry(options_frame)
+        entry_POS_X_SHIFT.insert(tk.END, POS_X_SHIFT)
+
+        entry_POS_Y_SHIFT = tk.Entry(options_frame)
+        entry_POS_Y_SHIFT.insert(tk.END, POS_Y_SHIFT)
+
+        entry_ALIGN = tk.Entry(options_frame)
+        entry_ALIGN.insert(tk.END, ALIGN)
+
+        label_ADD_EXTRA_COPIES.grid(row=0, column=0, sticky='E')
+        entry_ADD_EXTRA_COPIES.grid(row=0, column=1)
+
+        label_POS_X_SHIFT.grid(row=2, column=0, sticky='E')
+        entry_POS_X_SHIFT.grid(row=2, column=1)
+
+        label_POS_Y_SHIFT.grid(row=3, column=0, sticky='E')
+        entry_POS_Y_SHIFT.grid(row=3, column=1)
+
+        label_ALIGN.grid(row=1, column=0, sticky='E')
+        entry_ALIGN.grid(row=1, column=1)
 
         def on_click(event):
             if entry1.get('1.0', tk.END).strip() == DEFAULT_TEXT:
@@ -130,8 +188,6 @@ def main():
 
         def generiraj():
             INPUT_FILE = stringvar1.get()
-            if INPUT_FILE[0] == '{':
-                INPUT_FILE = INPUT_FILE[1:-1]
             try:
                 existing_pdf = PdfReader(INPUT_FILE)
                 NUM_PAGES = len(existing_pdf.pages)
@@ -163,14 +219,14 @@ def main():
 
             PAGE_WIDTH = existing_pdf.pages[0].mediabox.width
             PAGE_HEIGHT = existing_pdf.pages[0].mediabox.height
-            POS_X = POS_X_SHIFT % PAGE_WIDTH
-            POS_Y = POS_Y_SHIFT % PAGE_HEIGHT
+            POS_X = int(entry_POS_X_SHIFT.get()) % PAGE_WIDTH
+            POS_Y = int(entry_POS_Y_SHIFT.get()) % PAGE_HEIGHT
             output = PdfWriter()
 
             for dvorana, num in list_TABLE:
                 if num == 0:
                     continue
-                num += ADD_EXTRA_COPIES
+                num += int(entry_ADD_EXTRA_COPIES.get())
 
                 dots = Dots(num)
 
@@ -182,15 +238,15 @@ def main():
                     packet = BytesIO()
                     canvas = Canvas(packet, pagesize=(PAGE_WIDTH, PAGE_HEIGHT))
 
-                    if ALIGN == 'RIGHT':
+                    if entry_ALIGN.get().strip().upper() == 'RIGHT':
                         canvas.drawRightString(POS_X, POS_Y, STR)
                     else:
-                        canvas.drawLeftString(POS_X, POS_Y, STR)
+                        canvas.drawString(POS_X, POS_Y, STR)
 
                     canvas.save()
                     packet.seek(0)
 
-                    new_page = copy(existing_pdf.pages[0])
+                    new_page = deepcopy(existing_pdf.pages[0])
                     new_page.merge_page(PdfReader(packet).pages[0])
                     output.add_page(new_page)
 
@@ -206,7 +262,7 @@ def main():
                                 f"Uspješno je generirana datoteka <<{OUTPUT_FILE}>>")
             root.destroy()
 
-        gen_button = tk.Button(text='Generiraj', command=generiraj)
+        gen_button = tk.Button(root, text='Generiraj', command=generiraj)
 
         status = tk.Label(root,
                           textvar=stringvar2)
