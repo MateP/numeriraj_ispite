@@ -21,6 +21,7 @@ from copy import deepcopy
 ADD_EXTRA_COPIES = 3
 POS_X_SHIFT = -15
 POS_Y_SHIFT = 15
+CHUNK_SIZE = 4
 ALIGN = 'RIGHT'
 
 DEFAULT_TEXT = 'Ovdje zalijepi tablicu iz "Postavke provjere" (kartica "Studenata u dvorani") s FERweba!\n\
@@ -127,6 +128,7 @@ def main():
             options_frame, text='Broj dodatnih kopija po dvorani:')
         label_POS_X_SHIFT = tk.Label(options_frame, text='x-pomak:')
         label_POS_Y_SHIFT = tk.Label(options_frame, text='y-pomak:')
+        label_CHUNK_SIZE = tk.Label(options_frame, text='Broj dvorana po pdf-u:')
         label_ALIGN = tk.Label(
             options_frame, text='Pozicija (LEFT ili RIGHT):')
 
@@ -139,6 +141,9 @@ def main():
         entry_POS_Y_SHIFT = tk.Entry(options_frame)
         entry_POS_Y_SHIFT.insert(tk.END, POS_Y_SHIFT)
 
+        entry_CHUNK_SIZE = tk.Entry(options_frame)
+        entry_CHUNK_SIZE.insert(tk.END, CHUNK_SIZE)
+
         entry_ALIGN = tk.Entry(options_frame)
         entry_ALIGN.insert(tk.END, ALIGN)
 
@@ -150,6 +155,9 @@ def main():
 
         label_POS_Y_SHIFT.grid(row=3, column=0, sticky='E')
         entry_POS_Y_SHIFT.grid(row=3, column=1)
+
+        label_CHUNK_SIZE.grid(row=4, column=0, sticky='E')
+        entry_CHUNK_SIZE.grid(row=4, column=1)
 
         label_ALIGN.grid(row=1, column=0, sticky='E')
         entry_ALIGN.grid(row=1, column=1)
@@ -197,10 +205,7 @@ def main():
                                     f"<<{INPUT_FILE}>> nije valjana pdf datoteka.")
                 return
 
-            OUTPUT_FILE = os.path.splitext(INPUT_FILE)[0]+'_print.pdf'
-            if os.path.exists(OUTPUT_FILE):
-                messagebox.showinfo(
-                    "Upozorenje!", f"Datoteka <<{OUTPUT_FILE}>> već postoji i bit će prebrisana.")
+            
 
             TABLE = entry1.get('1.0', tk.END)
             list_TABLE, info = parse(TABLE)
@@ -221,45 +226,59 @@ def main():
             PAGE_HEIGHT = existing_pdf.pages[0].mediabox.height
             POS_X = int(entry_POS_X_SHIFT.get()) % PAGE_WIDTH
             POS_Y = int(entry_POS_Y_SHIFT.get()) % PAGE_HEIGHT
-            output = PdfWriter()
+            chunk_size = int(entry_CHUNK_SIZE.get())
+            
 
-            for dvorana, num in list_TABLE:
-                if num == 0:
-                    continue
-                num += int(entry_ADD_EXTRA_COPIES.get())
+            list_TABLE_NON_NULL = [(a,b) for (a,b) in list_TABLE if b>0]
+            chunks = [list_TABLE_NON_NULL[i:i+chunk_size] for i in range(0,len(list_TABLE_NON_NULL),chunk_size)]
 
-                dots = Dots(num)
+            for part,chunk in enumerate(chunks):
 
-                DIGITS = len(str(num))
-                for i in range(1, num+1):
-                    STR = f'{dvorana} {i:0{DIGITS}}/{num}'
-                    stringvar2.set(f'Obrađujem {STR} {dots}')
-                    root.update_idletasks()
-                    packet = BytesIO()
-                    canvas = Canvas(packet, pagesize=(PAGE_WIDTH, PAGE_HEIGHT))
+                output = PdfWriter()
 
-                    if entry_ALIGN.get().strip().upper() == 'RIGHT':
-                        canvas.drawRightString(POS_X, POS_Y, STR)
-                    else:
-                        canvas.drawString(POS_X, POS_Y, STR)
+                for dvorana, num in chunk:
+                    if num == 0:
+                        continue
+                    num += int(entry_ADD_EXTRA_COPIES.get())
 
-                    canvas.save()
-                    packet.seek(0)
+                    dots = Dots(num)
 
-                    new_page = deepcopy(existing_pdf.pages[0])
-                    new_page.merge_page(PdfReader(packet).pages[0])
-                    output.add_page(new_page)
+                    DIGITS = len(str(num))
+                    for i in range(1, num+1):
+                        STR = f'{dvorana} {i:0{DIGITS}}/{num}'
+                        stringvar2.set(f'Obrađujem {STR} {dots}')
+                        root.update_idletasks()
+                        packet = BytesIO()
+                        canvas = Canvas(packet, pagesize=(PAGE_WIDTH, PAGE_HEIGHT))
 
-                    for i in range(NUM_PAGES-1):
-                        output.add_page(existing_pdf.pages[i+1])
-            with open(OUTPUT_FILE, 'wb') as f:
-                output.write(f)
+                        if entry_ALIGN.get().strip().upper() == 'RIGHT':
+                            canvas.drawRightString(POS_X, POS_Y, STR)
+                        else:
+                            canvas.drawString(POS_X, POS_Y, STR)
+
+                        canvas.save()
+                        packet.seek(0)
+
+                        new_page = deepcopy(existing_pdf.pages[0])
+                        new_page.merge_page(PdfReader(packet).pages[0])
+                        output.add_page(new_page)
+
+                        for i in range(NUM_PAGES-1):
+                            output.add_page(existing_pdf.pages[i+1])
+
+                OUTPUT_FILE = f'{os.path.splitext(INPUT_FILE)[0]}_print_part_{part+1}.pdf'
+                if os.path.exists(OUTPUT_FILE):
+                    messagebox.showinfo(
+                        "Upozorenje!", f"Datoteka <<{OUTPUT_FILE}>> već postoji i bit će prebrisana.")
+
+                with open(OUTPUT_FILE, 'wb') as f:
+                    output.write(f)
 
             ###############
             ###############
 
             messagebox.showinfo("Obrada završena!",
-                                f"Uspješno je generirana datoteka <<{OUTPUT_FILE}>>")
+                                f"Uspješno su generirane datoteke <<{f'{os.path.splitext(INPUT_FILE)[0]}_print_part_1-{part+1}.pdf'}>>")
             root.destroy()
 
         gen_button = tk.Button(root, text='Generiraj', command=generiraj)
